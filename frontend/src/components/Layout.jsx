@@ -5,6 +5,8 @@ import Header from './Header.jsx'
 
 export default function Layout() {
   const { pathname } = useLocation()
-  useEffect(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }), [pathname])
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [pathname])
   return <div id="top"><Header key={pathname} /><main><Outlet /></main><Footer /></div>
 }

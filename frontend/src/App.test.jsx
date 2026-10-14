@@ -2,16 +2,20 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.jsx'
 
 function renderRoute(route = '/') {
-  return render(<MemoryRouter initialEntries={[route]}><App /></MemoryRouter>)
+  return render(<StrictMode><MemoryRouter initialEntries={[route]}><App /></MemoryRouter></StrictMode>)
 }
 
-beforeEach(() => { window.scrollTo = vi.fn(); global.fetch = vi.fn() })
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
+beforeEach(() => {
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => Promise.resolve())
+  vi.stubGlobal('fetch', vi.fn())
+})
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 async function fillConsultation(user) {
   await user.type(screen.getByLabelText(/full name/i), 'Amina Kamau')
