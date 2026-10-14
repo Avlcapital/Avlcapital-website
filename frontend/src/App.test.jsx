@@ -44,6 +44,16 @@ describe('AVL routed website', () => {
     expect(screen.getByRole('link', { name: /return to the AVL Capital home page/i })).toHaveAttribute('href', '/')
   })
 
+  it('presents the official Pesa na Pesa and Bima Hima product details', () => {
+    renderRoute('/solutions')
+    expect(screen.getByRole('heading', { name: 'Pesa na Pesa' })).toBeInTheDocument()
+    expect(screen.getAllByText('*519*25#')).toHaveLength(2)
+    expect(screen.getByText('990390')).toBeInTheDocument()
+    expect(screen.getByText(/financing terms of up to four months/i)).toBeInTheDocument()
+    expect(screen.getByText(/borrow only after reviewing the full cost/i)).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /official terms/i })).toHaveLength(2)
+  })
+
   it('navigates, marks the active route, scrolls to top, and closes the mobile menu', async () => {
     const user = userEvent.setup()
     renderRoute()
