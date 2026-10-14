@@ -1,0 +1,9 @@
+#bmad
+_bmad/
+_bmad-output/
+.agents
+.claude
+.cursor
+.github
+.codebuddy
+docs
