@@ -1,0 +1,4 @@
+import PageHero from '../components/PageHero.jsx'
+import { strengths } from '../data/content.js'
+
+export default function WhyAvl() { return <><PageHero kicker="Built on discipline" title={<>Confidence behind every <em>decision.</em></>}>Our model combines capable people, strong systems and responsible governance.</PageHero><section className="section"><div className="wrap split strengths"><div><h2>Responsible lending, backed by <em>sound practice.</em></h2><p>Technology supports our process, while thoughtful assessment and local market knowledge guide each financing decision.</p><div className="metric"><b>1.95–2.00%</b><small>Reported default rate over the last two financial years</small></div></div><div className="checks">{strengths.map((item, index) => <p key={item}><small>{String(index + 1).padStart(2, '0')}</small>{item}<b>✓</b></p>)}</div></div></section></> }

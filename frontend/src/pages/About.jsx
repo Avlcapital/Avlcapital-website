@@ -1,0 +1,5 @@
+import PageHero from '../components/PageHero.jsx'
+import SectionHeading from '../components/SectionHeading.jsx'
+import { values } from '../data/content.js'
+
+export default function About() { return <><PageHero kicker="Who we are" title={<>Purpose-driven lending, <em>built locally.</em></>}>AVL Capital Limited combines technology, market intelligence and disciplined appraisal to structure credit around real needs.</PageHero><section className="section"><div className="wrap split"><SectionHeading kicker="Our approach">A stronger financial base begins with the <em>right partner.</em></SectionHeading><div className="lead"><p>We are a licensed Digital Credit Provider serving individuals and businesses through digital and structured financing platforms.</p><p>Every engagement starts with the purpose, timeline and repayment capacity behind the request. That focus helps us recommend practical structures without overpromising.</p></div></div><div className="wrap values">{values.map(([number, title, text]) => <article key={number}><small>{number}</small><h3>{title}</h3><p>{text}</p></article>)}</div></section></> }

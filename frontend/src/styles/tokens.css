@@ -1,0 +1,6 @@
+:root {
+  --navy-950: #071a34; --navy-900: #102e5d; --navy-800: #16417b;
+  --cyan-600: #159ccc; --cyan-500: #23b9e8; --cyan-100: #e8f8fd;
+  --gold: #c9a253; --ink: #12213d; --muted: #637086; --surface: #fff;
+  --canvas: #f5f8fc; --line: #dce5ef; --shadow: 0 24px 70px rgba(6,31,75,.12);
+}

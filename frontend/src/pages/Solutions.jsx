@@ -1,0 +1,5 @@
+import { Link } from 'react-router-dom'
+import PageHero from '../components/PageHero.jsx'
+import ProductCards from '../components/ProductCards.jsx'
+
+export default function Solutions() { return <><PageHero kicker="What we finance" title={<>Solutions for <em>real momentum.</em></>}>From urgent personal needs to complex trade cycles, our financing is structured around purpose and repayment capacity.</PageHero><section className="section"><div className="wrap"><ProductCards /></div></section><section className="signature"><div className="wrap signature-grid"><article><small>PATENT PRODUCT</small><h2>Pesa na Pesa</h2><p>A tailored credit pathway built to turn immediate financial needs into forward momentum. Speak with our team for current eligibility and terms.</p><Link to="/contact">Ask about Pesa na Pesa ↗</Link></article><article><small>INSURANCE FINANCE</small><h2>Bima Hima</h2><p>A practical way to finance eligible insurance premiums, helping you maintain important cover without one large upfront payment.</p><Link to="/contact">Ask about Bima Hima ↗</Link></article></div></section></> }
