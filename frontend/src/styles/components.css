@@ -45,6 +45,12 @@ input[type=range] { width: 100%; margin: 24px 0 34px; accent-color: var(--cyan-6
 .disclaimer { color: var(--muted); font-size: 12px; line-height: 1.55; }.calc-box .btn, form .btn { width: 100%; }
 form > label { margin-top: 18px; }.consent { display: flex; gap: 9px; align-items: flex-start; margin: 20px 0; }.consent input { margin-top: 2px; }
 .success > b { display: grid; width: 50px; height: 50px; place-items: center; border-radius: 50%; color: #fff; background: var(--cyan-600); }.success button { border: 0; background: transparent; color: var(--navy-800); font-weight: 600; }
+.btn:disabled { cursor: wait; opacity: .65; transform: none; }
+.form-error { margin-bottom: 20px; padding: 16px; border-left: 4px solid #b42318; color: #7a271a; background: #fef3f2; }
+.form-error p { margin: 6px 0 0; }
+.field-error { display: block; margin-top: 6px; color: #b42318; font-size: 12px; font-weight: 500; }
+form [aria-invalid="true"] { border-color: #b42318 !important; }
+.website-field { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .faq { display: grid; grid-template-columns: .8fr 1fr; gap: 80px; }.faq-list article { border-bottom: 1px solid var(--line); }.faq-list h3 { margin: 0; }.faq-list button { width: 100%; padding: 22px 0; display: flex; justify-content: space-between; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }.faq-list p { margin: 0 0 22px; color: var(--muted); line-height: 1.65; }
 footer { color: var(--navy-900); background: var(--cyan-500); }.footer-top { padding: 45px 0; display: grid; grid-template-columns: auto 1fr auto; gap: 40px; align-items: center; }.footer-top p { max-width: 400px; }.footer-top > a { display: grid; width: 45px; height: 45px; place-items: center; border: 1px solid rgba(9,26,52,.25); border-radius: 50%; text-decoration: none; }.footer-bottom { padding: 20px 0 30px; display: flex; justify-content: space-between; gap: 20px; border-top: 1px solid rgba(9,26,52,.18); font-size: 12px; }.footer-bottom a { text-decoration: none; }
 @media (max-width: 850px) { .menu-button { display: block; } nav { position: absolute; inset: 82px 0 auto; display: none; padding: 25px; flex-direction: column; align-items: stretch; background: #fff; border-bottom: 1px solid var(--line); } nav.open { display: flex; } nav a { padding: 8px; } .cards { grid-template-columns: 1fr 1fr; } .faq { grid-template-columns: 1fr; gap: 35px; } .footer-top, .footer-bottom { display: flex; flex-wrap: wrap; } }

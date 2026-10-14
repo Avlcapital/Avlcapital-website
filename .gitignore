@@ -7,3 +7,6 @@ _bmad-output/
 .github
 .codebuddy
 docs
+node_modules/
+dist/
+.env

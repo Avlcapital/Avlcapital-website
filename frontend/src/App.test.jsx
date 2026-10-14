@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,8 +10,16 @@ function renderRoute(route = '/') {
   return render(<MemoryRouter initialEntries={[route]}><App /></MemoryRouter>)
 }
 
-beforeEach(() => { window.scrollTo = vi.fn() })
-afterEach(() => cleanup())
+beforeEach(() => { window.scrollTo = vi.fn(); global.fetch = vi.fn() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
+
+async function fillConsultation(user) {
+  await user.type(screen.getByLabelText(/full name/i), 'Amina Kamau')
+  await user.type(screen.getByLabelText(/phone number/i), '+254700000000')
+  await user.type(screen.getByLabelText(/email address/i), 'amina@example.com')
+  await user.selectOptions(screen.getByLabelText(/interested in/i), 'Short-term loans')
+  await user.click(screen.getByLabelText(/I consent/i))
+}
 
 describe('AVL routed website', () => {
   it.each([
@@ -64,18 +72,70 @@ describe('AVL routed website', () => {
     expect(screen.getByText(/illustrative only/i)).toBeInTheDocument()
   })
 
-  it('requires consultation fields and confirms a valid demo submission', async () => {
+  it('disables duplicate submission while pending and confirms only a 201 response', async () => {
     const user = userEvent.setup()
     renderRoute('/contact')
     const submit = screen.getByRole('button', { name: /request a consultation/i })
+    await fillConsultation(user)
+    let resolveRequest
+    fetch.mockReturnValue(new Promise((resolve) => { resolveRequest = resolve }))
     await user.click(submit)
+    expect(submit).toBeDisabled()
+    await user.click(submit)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    resolveRequest({ status: 201, json: async () => ({ status: 'received', id: 'id' }) })
+    expect(await screen.findByRole('status')).toHaveTextContent(/securely recorded/i)
+  })
+
+  it('preserves values and presents accessible server validation errors', async () => {
+    const user = userEvent.setup()
+    fetch.mockResolvedValue({ status: 400, json: async () => ({ error: 'validation_error', message: 'Please correct the highlighted fields.', fields: { email: 'Enter a valid email address.', name: 'Enter your full name.' } }) })
+    renderRoute('/contact'); await fillConsultation(user); await user.click(screen.getByRole('button', { name: /request a consultation/i }))
+    const summary = await screen.findByRole('alert')
+    expect(summary).toHaveTextContent(/correct the highlighted/i)
+    expect(summary).toHaveFocus()
+    expect(screen.getByLabelText(/email address/i)).toHaveValue('amina@example.com')
+    expect(screen.getByLabelText(/email address/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/email address/i), 'x')
+    expect(screen.queryByText('Enter a valid email address.')).not.toBeInTheDocument()
+    expect(screen.getByText('Enter your full name.')).toBeInTheDocument()
+  })
+
+  it('times out a stalled request and re-enables submission', async () => {
+    const user = userEvent.setup()
+    fetch.mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    }))
+    renderRoute('/contact'); await fillConsultation(user)
+    const submit = screen.getByRole('button', { name: /request a consultation/i })
+    vi.useFakeTimers()
+    fireEvent.click(submit)
+    expect(submit).toBeDisabled()
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+    expect(screen.getByRole('alert')).toHaveTextContent(/request timed out/i)
+    expect(submit).not.toBeDisabled()
+    vi.useRealTimers()
+  })
+
+  it('shows a recoverable network error and submits again only when retried', async () => {
+    const user = userEvent.setup()
+    fetch.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ status: 201, json: async () => ({ status: 'received' }) })
+    renderRoute('/contact'); await fillConsultation(user)
+    await user.click(screen.getByRole('button', { name: /request a consultation/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/check your connection/i)
     expect(screen.queryByText('Thank you.')).not.toBeInTheDocument()
-    await user.type(screen.getByLabelText(/full name/i), 'Amina Kamau')
-    await user.type(screen.getByLabelText(/phone number/i), '+254700000000')
-    await user.type(screen.getByLabelText(/email address/i), 'amina@example.com')
-    await user.selectOptions(screen.getByLabelText(/interested in/i), 'Short-term loans')
-    await user.click(screen.getByLabelText(/I consent/i))
-    await user.click(submit)
-    expect(screen.getByRole('status')).toHaveTextContent(/captured in this demo/i)
+    await user.click(screen.getByRole('button', { name: /request a consultation/i }))
+    expect(await screen.findByRole('status')).toHaveTextContent(/securely recorded/i)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows rate-limit failures and allows a later retry', async () => {
+    const user = userEvent.setup()
+    fetch.mockResolvedValueOnce({ status: 429, json: async () => ({ error: 'rate_limited', message: 'Too many requests. Please try again later.' }) }).mockResolvedValueOnce({ status: 201, json: async () => ({ status: 'received' }) })
+    renderRoute('/contact'); await fillConsultation(user); const submit = screen.getByRole('button', { name: /request a consultation/i })
+    await user.click(submit); expect(await screen.findByRole('alert')).toHaveTextContent(/too many requests/i)
+    expect(submit).not.toBeDisabled(); await user.click(submit)
+    await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument())
   })
 })
