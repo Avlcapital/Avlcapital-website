@@ -1,0 +1,4 @@
+const cookieValue = (request, name) => (request.headers.cookie || '').split(';').map((part) => part.trim().split('=')).find(([key]) => key === name)?.[1]
+export function requireAdmin(authService) { return async (request, response, next) => { try { request.sessionToken = cookieValue(request, 'avl_admin'); const admin = await authService.authenticate(request.sessionToken); if (!admin) return response.status(401).json({ error: 'unauthorized', message: 'Authentication required.' }); request.admin = admin; return next() } catch (error) { return next(error) } } }
+export const sessionCookie = (token, expiresAt, secure = true) => `avl_admin=${token}; Path=/; HttpOnly; SameSite=Strict; Expires=${expiresAt.toUTCString()}${secure ? '; Secure' : ''}`
+export const clearSessionCookie = (secure = true) => `avl_admin=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? '; Secure' : ''}`

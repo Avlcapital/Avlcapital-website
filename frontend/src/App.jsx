@@ -7,10 +7,12 @@ import Insights from './pages/Insights.jsx'
 import NotFound from './pages/NotFound.jsx'
 import Solutions from './pages/Solutions.jsx'
 import WhyAvl from './pages/WhyAvl.jsx'
+import Admin from './pages/Admin.jsx'
 
 export default function App() {
   return (
     <Routes>
+      <Route path="admin" element={<Admin />} />
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="about" element={<About />} />

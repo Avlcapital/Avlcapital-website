@@ -26,6 +26,78 @@ async function fillConsultation(user) {
 }
 
 describe('AVL routed website', () => {
+  it('keeps the admin route outside public navigation and shows protected access', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) })
+    renderRoute('/admin')
+    expect(await screen.findByRole('heading', { name: /consultation inbox/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/password/i)).toHaveAttribute('minlength', '12')
+    expect(screen.queryByRole('navigation', { name: /primary navigation/i })).not.toBeInTheDocument()
+  })
+
+  it('renders the authenticated inbox, message detail, and read control', async () => {
+    fetch.mockImplementation(async (url, options = {}) => {
+      if (url.endsWith('/admin/session')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      if (url.startsWith('/api/consultations?') && !options.method) return { ok: true, status: 200, json: async () => ({ items: [{ id: '507f1f77bcf86cd799439011', name: 'Amina', solution: 'Trade finance', createdAt: '2026-01-02T00:00:00.000Z', readAt: null }], page: 1, pages: 2, total: 21 }) }
+      if (url.endsWith('507f1f77bcf86cd799439011') && !options.method) return { ok: true, status: 200, json: async () => ({ id: '507f1f77bcf86cd799439011', name: 'Amina', email: 'a@example.com', phone: '+254700000000', solution: 'Trade finance', message: 'Hello', createdAt: '2026-01-02T00:00:00.000Z', readAt: null }) }
+      return { ok: true, status: 200, json: async () => ({ id: '507f1f77bcf86cd799439011', name: 'Amina', email: 'a@example.com', phone: '+254700000000', solution: 'Trade finance', message: 'Hello', createdAt: '2026-01-02T00:00:00.000Z', readAt: '2026-01-03T00:00:00.000Z' }) }
+    })
+    const user = userEvent.setup()
+    renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: /Amina/i }))
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /mark unread/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(fetch).toHaveBeenCalledWith('/api/consultations?page=2&pageSize=20', expect.any(Object))
+  })
+
+  it('shows the authenticated empty inbox state', async () => {
+    fetch.mockImplementation(async (url) => ({ ok: true, status: 200, json: async () => url.endsWith('/admin/session') ? { admin: { email: 'owner@example.com' } } : { items: [], page: 1, pages: 0, total: 0 } }))
+    renderRoute('/admin')
+    expect(await screen.findByText(/no consultation messages yet/i)).toBeInTheDocument()
+  })
+
+  it('logs in successfully and loads the inbox', async () => {
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith('/admin/session')) return { ok: false, status: 401, json: async () => ({}) }
+      if (url.endsWith('/admin/login')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      return { ok: true, status: 200, json: async () => ({ items: [], page: 1, pages: 0, total: 0 }) }
+    })
+    const user = userEvent.setup(); renderRoute('/admin')
+    await user.type(await screen.findByLabelText('Email'), 'owner@example.com')
+    await user.type(screen.getByLabelText('Password'), 'very-long-password')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByText(/signed in as owner@example.com/i)).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith('/api/admin/login', expect.objectContaining({ method: 'POST', credentials: 'include' }))
+  })
+
+  it('supports forgot-password and OTP reset workflows', async () => {
+    fetch.mockImplementation(async (url) => url.endsWith('/admin/session') ? { ok: false, status: 401, json: async () => ({}) } : { ok: true, status: 200, json: async () => ({ message: 'ok' }) })
+    const user = userEvent.setup(); renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: /forgot password/i }))
+    await user.type(screen.getByLabelText('Email'), 'owner@example.com')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(/reset code has been sent/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /I have a code/i }))
+    await user.clear(screen.getByLabelText('Email'))
+    await user.type(screen.getByLabelText('Email'), 'owner@example.com')
+    await user.type(screen.getByLabelText(/six-digit code/i), '123456')
+    await user.type(screen.getByLabelText(/new password/i), 'replacement-password')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByText(/password reset/i)).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith('/api/admin/reset-password', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('shows feedback when logout fails', async () => {
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith('/admin/session')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      if (url.endsWith('/admin/logout')) return { ok: false, status: 500, json: async () => ({ message: 'Try again later.' }) }
+      return { ok: true, status: 200, json: async () => ({ items: [], page: 1, pages: 0, total: 0 }) }
+    })
+    const user = userEvent.setup(); renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: /sign out/i }))
+    expect(await screen.findByRole('status')).toHaveTextContent(/could not sign out.*try again later/i)
+  })
+
   it.each([
     ['/about', /Purpose-driven lending/], ['/solutions', /Solutions for/],
     ['/why-avl', /Confidence behind/], ['/insights', /Milestones that/],
