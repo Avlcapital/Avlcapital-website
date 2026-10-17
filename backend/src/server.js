@@ -13,5 +13,6 @@ await authService.bootstrap(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD)
 const app = createApp({ service: createConsultationService(database.consultationRepository), authService, corsOrigin: process.env.CORS_ORIGIN, rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 900_000), rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 20), authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX || 10), secureCookies: process.env.NODE_ENV !== 'development' })
 const server = app.listen(port, () => console.log(`AVL Capital API listening on port ${port}`))
 async function shutdown() { server.close(async () => { await database.close(); process.exit(0) }) }
+
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)
