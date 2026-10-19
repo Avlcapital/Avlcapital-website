@@ -5,8 +5,9 @@ import { requireAdmin } from './middlewares/auth.js'
 import { errorHandler } from './middlewares/errors.js'
 import { adminRouter } from './routers/admin.js'
 import { consultationRouter } from './routers/consultations.js'
+import { partnerRouter } from './routers/partners.js'
 
-export function createApp({ service, authService, corsOrigin, rateLimitWindowMs, rateLimitMax, authRateLimitMax, secureCookies = true }) {
+export function createApp({ service, partnerService, authService, corsOrigin, rateLimitWindowMs, rateLimitMax, authRateLimitMax, secureCookies = true }) {
   const app = express()
   app.disable('x-powered-by')
   app.use(helmet())
@@ -15,6 +16,7 @@ export function createApp({ service, authService, corsOrigin, rateLimitWindowMs,
   app.get('/api/health', (_request, response) => response.json({ status: 'ok' }))
   const protectedRoute = authService ? requireAdmin(authService) : (_request, response) => response.status(401).json({ error: 'unauthorized', message: 'Authentication required.' })
   app.use('/api/consultations', consultationRouter({ service, requireAdmin: protectedRoute, rateLimitWindowMs, rateLimitMax }))
+  if (partnerService) app.use('/api/partners', partnerRouter({ service: partnerService, requireAdmin: protectedRoute, rateLimitWindowMs, rateLimitMax }))
   if (authService) app.use('/api/admin', adminRouter({ auth: authService, requireAdmin: protectedRoute, secureCookies, rateLimitWindowMs, authRateLimitMax }))
   app.use(errorHandler)
   return app

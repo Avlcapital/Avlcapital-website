@@ -1,3 +1,4 @@
+.admin-tabs { display: flex; gap: 8px; max-width: 1200px; margin: 0 auto 20px; }.admin-tabs button { padding: 11px 16px; border: 1px solid var(--line); border-radius: 6px; color: var(--navy-900); background: #fff; cursor: pointer; }.admin-tabs button[aria-pressed="true"] { color: #fff; background: var(--navy-900); }
 a, button, input, select, textarea { transition: .2s ease; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(35,185,232,.55); outline-offset: 3px; }
 .site-header { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--line); backdrop-filter: blur(14px); }

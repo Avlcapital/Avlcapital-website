@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { createConsultationService } from '../src/services/consultations.js'
+import { createPartnerService } from '../src/services/partners.js'
 
 const validPayload = { name: '  Amina   Kamau ', phone: '+254 700 000 000', email: ' AMINA@EXAMPLE.COM ', solution: 'Short-term loans', message: ' Working capital ', consent: true, website: '' }
 function setup({ create = async () => 'opaque-id', rateLimitMax = 20 } = {}) {
@@ -53,4 +54,13 @@ describe('consultation API', () => {
     const { app } = setup({ create: async () => { throw new Error('secret database failure') } }); const response = await request(app).post('/api/consultations').send(validPayload).expect(500)
     assert.equal(response.body.error, 'server_error'); assert.doesNotMatch(JSON.stringify(response.body), /secret|stack|database/i)
   })
+})
+
+describe('partner enquiry API', () => {
+  const valid = { contactName: '  Jane   Wanjiku ', organization: '  Highway Fuels ', role: ' Owner ', phone: '+254 711 222 333', email: ' JANE@EXAMPLE.COM ', partnerType: 'Petrol station', location: ' Nakuru ', stationCount: '3', interest: ' Customer finance ', consent: true, website: '' }
+  function partnerSetup(rateLimitMax = 20) { const records = []; const partnerService = createPartnerService({ create: async (record) => { records.push(record); return 'partner-id' } }); return { app: createApp({ service: createConsultationService({ create: async () => 'id' }), partnerService, rateLimitMax, rateLimitWindowMs: 60_000 }), records } }
+  it('normalizes and stores a petrol-station lead separately', async () => { const { app, records } = partnerSetup(); const response = await request(app).post('/api/partners').send(valid).expect(201); assert.equal(response.body.id, 'partner-id'); assert.equal(response.body.message, 'Your partnership enquiry has been received.'); assert.equal(records[0].contactName, 'Jane Wanjiku'); assert.equal(records[0].email, 'jane@example.com'); assert.equal(records[0].stationCount, 3); assert.equal(records[0].organization, 'Highway Fuels'); await request(app).post('/api/partners').send({ ...valid, stationCount: 4 }).expect(201); assert.equal(records[1].stationCount, 4) })
+  it('accepts another supported business type without station count', async () => { const { app, records } = partnerSetup(); await request(app).post('/api/partners').send({ ...valid, partnerType: 'Employer', stationCount: '' }).expect(201); assert.equal(records[0].stationCount, null); assert.equal(records[0].partnerType, 'Employer') })
+  it('rejects missing consent, invalid contact data, unsupported type, oversized interest, and bad station count', async () => { const { app, records } = partnerSetup(); const response = await request(app).post('/api/partners').send({ ...valid, phone: 'bad', email: 'bad', partnerType: 'Unknown', stationCount: '0', interest: 'x'.repeat(2001), consent: false }).expect(400); assert.deepEqual(Object.keys(response.body.fields).sort(), ['consent', 'email', 'interest', 'partnerType', 'phone', 'stationCount']); assert.equal(records.length, 0) })
+  it('returns an opaque success for the honeypot and rate limits excess submissions', async () => { const { app, records } = partnerSetup(2); const bot = await request(app).post('/api/partners').send({ ...valid, website: 'bot.example' }).expect(201); assert.doesNotMatch(JSON.stringify(bot.body), /bot|honeypot/i); assert.equal(records.length, 0); await request(app).post('/api/partners').send(valid).expect(201); const limited = await request(app).post('/api/partners').send(valid).expect(429); assert.equal(limited.body.error, 'rate_limited') })
 })

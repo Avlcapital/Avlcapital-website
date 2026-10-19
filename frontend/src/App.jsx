@@ -8,6 +8,7 @@ import NotFound from './pages/NotFound.jsx'
 import Solutions from './pages/Solutions.jsx'
 import WhyAvl from './pages/WhyAvl.jsx'
 import Admin from './pages/Admin.jsx'
+import Partner from './pages/Partner.jsx'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="why-avl" element={<WhyAvl />} />
         <Route path="insights" element={<Insights />} />
         <Route path="contact" element={<Contact />} />
+        <Route path="partner" element={<Partner />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

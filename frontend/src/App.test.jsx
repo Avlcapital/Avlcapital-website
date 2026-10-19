@@ -25,11 +25,23 @@ async function fillConsultation(user) {
   await user.click(screen.getByLabelText(/I consent/i))
 }
 
+async function fillPartner(user) {
+  await user.type(screen.getByLabelText(/contact name/i), 'Jane Wanjiku')
+  await user.type(screen.getByLabelText(/organization/i), 'Highway Fuels')
+  await user.type(screen.getByLabelText(/your role/i), 'Owner')
+  await user.selectOptions(screen.getByLabelText(/partner type/i), 'Petrol station')
+  await user.type(screen.getByLabelText(/phone number/i), '+254711222333')
+  await user.type(screen.getByLabelText(/email address/i), 'jane@example.com')
+  await user.type(screen.getByLabelText(/business location/i), 'Nakuru')
+  await user.type(screen.getByLabelText(/partnership interest/i), 'Customer finance')
+  await user.click(screen.getByLabelText(/I consent/i))
+}
+
 describe('AVL routed website', () => {
   it('keeps the admin route outside public navigation and shows protected access', async () => {
     fetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) })
     renderRoute('/admin')
-    expect(await screen.findByRole('heading', { name: /consultation inbox/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /enquiry inbox/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/password/i)).toHaveAttribute('minlength', '12')
     expect(screen.queryByRole('navigation', { name: /primary navigation/i })).not.toBeInTheDocument()
   })
@@ -223,5 +235,66 @@ describe('AVL routed website', () => {
     await user.click(submit); expect(await screen.findByRole('alert')).toHaveTextContent(/too many requests/i)
     expect(submit).not.toBeDisabled(); await user.click(submit)
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument())
+  })
+
+  it('presents partnership prominently and submits a dedicated partner payload', async () => {
+    const user = userEvent.setup(); fetch.mockResolvedValue({ status: 201, json: async () => ({ status: 'received', id: 'partner-id' }) })
+    renderRoute('/partner')
+    expect(screen.getByRole('heading', { level: 1, name: /shared growth/i })).toBeInTheDocument()
+    expect(screen.getByText(/petrol stations are especially welcome/i)).toBeInTheDocument()
+    await fillPartner(user); await user.click(screen.getByRole('button', { name: /start the conversation/i }))
+    expect(await screen.findByRole('status')).toHaveTextContent(/partnership enquiry has been received/i)
+    expect(fetch).toHaveBeenCalledWith('/api/partners', expect.objectContaining({ method: 'POST', body: expect.stringContaining('Highway Fuels') }))
+  })
+
+  it('switches to the protected partner queue and displays full lead details', async () => {
+    fetch.mockImplementation(async (url, options = {}) => {
+      if (url.endsWith('/admin/session')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      if (url.startsWith('/api/consultations?')) return { ok: true, status: 200, json: async () => ({ items: [], page: 1, pages: 0, total: 0 }) }
+      if (url.startsWith('/api/partners?')) return { ok: true, status: 200, json: async () => ({ items: [{ id: '507f1f77bcf86cd799439011', contactName: 'Jane', organization: 'Highway Fuels', partnerType: 'Petrol station', createdAt: '2026-01-03T00:00:00.000Z', readAt: null }], page: 1, pages: 1, total: 1 }) }
+      if (url.endsWith('/api/partners/507f1f77bcf86cd799439011') && !options.method) return { ok: true, status: 200, json: async () => ({ id: '507f1f77bcf86cd799439011', contactName: 'Jane', organization: 'Highway Fuels', role: 'Owner', email: 'j@example.com', phone: '+254711222333', partnerType: 'Petrol station', location: 'Nakuru', stationCount: 3, interest: 'Customer finance', createdAt: '2026-01-03T00:00:00.000Z', readAt: null }) }
+      return { ok: true, status: 200, json: async () => ({ id: '507f1f77bcf86cd799439011', contactName: 'Jane', organization: 'Highway Fuels', role: 'Owner', email: 'j@example.com', phone: '+254711222333', partnerType: 'Petrol station', location: 'Nakuru', stationCount: 3, interest: 'Customer finance', createdAt: '2026-01-03T00:00:00.000Z', readAt: '2026-01-04T00:00:00.000Z' }) }
+    })
+    const user = userEvent.setup(); renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: 'Partner enquiries' }))
+    await user.click(await screen.findByRole('button', { name: /Highway Fuels/i }))
+    expect(await screen.findByText('Customer finance')).toBeInTheDocument()
+    expect(screen.getByText(/Owner/)).toBeInTheDocument()
+  })
+
+  it('associates partner server field errors and succeeds when retried', async () => {
+    const user = userEvent.setup()
+    fetch.mockResolvedValueOnce({ status: 400, json: async () => ({ error: 'validation_error', message: 'Please correct the highlighted fields.', fields: { email: 'Enter a valid email address.' } }) }).mockResolvedValueOnce({ status: 201, json: async () => ({ status: 'received', id: 'partner-id' }) })
+    renderRoute('/partner'); await fillPartner(user)
+    const email = screen.getByLabelText(/email address/i)
+    await user.click(screen.getByRole('button', { name: /start the conversation/i }))
+    expect(await screen.findByRole('alert')).toHaveFocus()
+    expect(email).toHaveAttribute('aria-invalid', 'true')
+    expect(email).toHaveAttribute('aria-describedby', 'email-error')
+    expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument()
+    await user.type(email, 'x')
+    expect(screen.queryByText('Enter a valid email address.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /start the conversation/i }))
+    expect(await screen.findByRole('status')).toHaveTextContent(/partnership enquiry has been received/i)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores an out-of-order consultation response after switching to partners', async () => {
+    let resolveConsultations
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith('/admin/session')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      if (url.startsWith('/api/consultations?')) return new Promise((resolve) => { resolveConsultations = resolve })
+      if (url.startsWith('/api/partners?')) return { ok: true, status: 200, json: async () => ({ items: [{ id: 'p1', contactName: 'Jane', organization: 'Highway Fuels', partnerType: 'Petrol station', createdAt: '2026-01-03T00:00:00.000Z', readAt: null }], page: 1, pages: 1, total: 1 }) }
+      return { ok: false, status: 404, json: async () => ({}) }
+    })
+    const user = userEvent.setup(); renderRoute('/admin')
+    await waitFor(() => expect(resolveConsultations).toBeTypeOf('function'))
+    await user.click(screen.getByRole('button', { name: 'Partner enquiries' }))
+    expect(await screen.findByRole('button', { name: /Highway Fuels/i })).toBeInTheDocument()
+    resolveConsultations({ ok: true, status: 200, json: async () => ({ items: [{ id: 'c1', name: 'Stale consultation', solution: 'Trade finance', createdAt: '2026-01-02T00:00:00.000Z', readAt: null }], page: 9, pages: 9, total: 99 }) })
+    await act(async () => Promise.resolve())
+    expect(screen.getByRole('button', { name: /Highway Fuels/i })).toBeInTheDocument()
+    expect(screen.queryByText('Stale consultation')).not.toBeInTheDocument()
+    expect(screen.getByText(/Page 1 of 1 · 1 messages/)).toBeInTheDocument()
   })
 })
