@@ -1,0 +1,9 @@
+import PartnerEnquiryForm from '../components/PartnerEnquiryForm.jsx'
+import PageHero from '../components/PageHero.jsx'
+
+export default function Partner() {
+  return <><PageHero kicker="Grow with AVL" title={<>Turn local reach into <em>shared growth.</em></>}>We partner with petrol-station operators and other established businesses to connect more customers with practical financial services.</PageHero>
+    <section className="section partner-value"><div className="wrap section-head"><div><p className="kicker">Why partner with us</p><h2>Built for ambitious <em>operators.</em></h2></div><p>AVL brings regulated financial expertise, responsive support and customer-focused products. You bring trusted local presence and a clear understanding of your market.</p></div><div className="wrap values"><article><small>01</small><h3>Serve more customers</h3><p>Explore relevant finance access for the people and businesses already moving through your network.</p></article><article><small>02</small><h3>Strengthen your proposition</h3><p>Add a credible financial-services relationship without making automatic approval promises.</p></article><article><small>03</small><h3>Build with local insight</h3><p>Work directly with a Kenyan team that understands structured partnerships and responsible lending.</p></article></div></section>
+    <section className="partner-enquiry"><div className="wrap partner-grid"><aside><p className="kicker dark">A good fit</p><h2>Let’s explore the <em>opportunity.</em></h2><p>Petrol stations are especially welcome, and we also consider other commercial partners with a strong customer base and a responsible way of working.</p><ul className="partner-checklist"><li>Established business operations</li><li>A clear customer or distribution opportunity</li><li>Commitment to transparent, responsible service</li><li>A named contact ready to shape the partnership</li></ul></aside><PartnerEnquiryForm /></div></section>
+  </>
+}

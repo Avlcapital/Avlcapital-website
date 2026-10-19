@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import Logo from './Logo.jsx'
 
-const links = [['/about', 'About'], ['/solutions', 'Solutions'], ['/why-avl', 'Why AVL'], ['/insights', 'Insights']]
+const links = [['/about', 'About'], ['/solutions', 'Solutions'], ['/why-avl', 'Why AVL'], ['/partner', 'Partner'], ['/insights', 'Insights']]
 
 export default function Header() {
   const [open, setOpen] = useState(false)
