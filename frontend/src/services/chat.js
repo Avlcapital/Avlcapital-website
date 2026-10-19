@@ -13,5 +13,5 @@ export const chatApi = {
   verifyRecovery: (email, code) => request('/recovery/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
   messages: () => request('/messages'),
   send: (body) => request('/messages', { method: 'POST', body: JSON.stringify({ body }) }),
-  stream: (onEvent, onError) => { const source = new EventSource('/api/chat/stream'); source.onmessage = ({ data }) => onEvent(JSON.parse(data)); source.onerror = onError; return () => source.close() },
+  stream: (onEvent, onError) => { const source = new EventSource('/api/chat/stream'); source.onmessage = ({ data }) => { try { onEvent(JSON.parse(data)) } catch (error) { onError(error) } }; source.onerror = onError; return () => source.close() },
 }

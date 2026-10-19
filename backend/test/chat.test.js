@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import http from 'node:http'
 import { describe, it } from 'node:test'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
@@ -9,7 +10,7 @@ const conversationId = '507f1f77bcf86cd799439011'
 const messageIds = ['507f1f77bcf86cd799439012', '507f1f77bcf86cd799439013', '507f1f77bcf86cd799439014']
 const objectId = (value) => ({ toString: () => value })
 
-function setup() {
+function setup({ mailer: mailerOverride } = {}) {
   const conversationRecords = []; const messageRecords = []; const recoveryRecords = []; const delivered = []
   const conversations = {
     async create(record) { const id = conversationRecords.length === 0 ? conversationId : `507f1f77bcf86cd7994390${20 + conversationRecords.length}`; conversationRecords.push({ ...record, _id: objectId(id) }); return id },
@@ -34,11 +35,11 @@ function setup() {
     async invalidate(id) { const index = recoveryRecords.findIndex((entry) => entry._id === id); if (index >= 0) recoveryRecords.splice(index, 1) },
     async invalidateForEmail(email) { for (let index = recoveryRecords.length - 1; index >= 0; index -= 1) if (recoveryRecords[index].email === email && !recoveryRecords[index].usedAt) recoveryRecords.splice(index, 1) },
   }
-  const mailer = { async sendChatRecovery(payload) { delivered.push(payload) } }
-  const chatService = createChatService({ conversations, messages, recoveryCodes, mailer })
+  const mailer = mailerOverride || { async sendChatRecovery(payload) { delivered.push(payload) } }
+  const chatService = createChatService({ conversations, messages, recoveryCodes, mailer, logger: { error() {} } })
   const authService = { authenticate: async (token) => token === 'admin-token' ? { id: 'admin-1', email: 'owner@example.com' } : null }
   const app = createApp({ service: createConsultationService({ create: async () => 'id' }), chatService, authService, secureCookies: false, rateLimitMax: 100, rateLimitWindowMs: 60_000 })
-  return { app, conversationRecords, messageRecords, recoveryRecords, delivered }
+  return { app, chatService, conversationRecords, messageRecords, recoveryRecords, delivered }
 }
 
 describe('live chat API', () => {
@@ -74,6 +75,12 @@ describe('live chat API', () => {
     const unknown = await request(app).post('/api/chat/recovery/request').send({ email: 'nobody@example.com' }).expect(202)
     assert.deepEqual(known.body, unknown.body); assert.equal(delivered.length, 1); assert.equal(delivered[0].to, 'amina@example.com'); assert.match(delivered[0].code, /^\d{6}$/)
   })
+  it('keeps SMTP delivery failures generic and invalidates the undelivered code', async () => {
+    const { app, recoveryRecords } = setup({ mailer: { async sendChatRecovery() { throw new Error('SMTP unavailable') } } })
+    await request(app).post('/api/chat/session').send({ name: 'Amina', email: 'amina@example.com' }).expect(201)
+    const response = await request(app).post('/api/chat/recovery/request').send({ email: 'amina@example.com' }).expect(202)
+    assert.match(response.body.message, /if a conversation exists/i); assert.equal(recoveryRecords.length, 0)
+  })
   it('recovers the latest conversation once and rotates access away from the previous browser', async () => {
     const { app, delivered } = setup(); const previous = request.agent(app)
     await previous.post('/api/chat/session').send({ name: 'Amina', email: 'amina@example.com' }).expect(201)
@@ -98,5 +105,18 @@ describe('live chat API', () => {
     await request(app).post('/api/chat/recovery/request').send({ email: 'shared@example.com' }).expect(202)
     const result = await request(app).post('/api/chat/recovery/verify').send({ email: 'shared@example.com', code: delivered[0].code }).expect(200)
     assert.equal(result.body.conversation.name, 'Latest')
+  })
+  it('frames authenticated visitor events as SSE data', async () => {
+    const { app, chatService } = setup(); const created = await request(app).post('/api/chat/session').send({ name: 'Amina', email: 'amina@example.com' }).expect(201)
+    const cookie = created.headers['set-cookie'][0].split(';')[0]; const server = app.listen(0)
+    try {
+      const body = await new Promise((resolve, reject) => {
+        let received = ''; const streamRequest = http.get({ hostname: '127.0.0.1', port: server.address().port, path: '/api/chat/stream', headers: { Cookie: cookie } }, (response) => {
+          assert.equal(response.statusCode, 200); assert.match(response.headers['content-type'], /text\/event-stream/)
+          response.setEncoding('utf8'); response.on('data', (chunk) => { received += chunk; if (received.includes(': connected')) chatService.hub.publish(`conversation:${conversationId}`, { type: 'status', conversationId, status: 'closed' }); if (received.includes('data:')) { streamRequest.destroy(); resolve(received) } }); response.on('error', reject)
+        }); streamRequest.on('error', (error) => { if (error.code !== 'ECONNRESET') reject(error) })
+      })
+      assert.match(body, /data: \{"type":"status","conversationId":"507f1f77bcf86cd799439011","status":"closed"\}\n\n/)
+    } finally { await new Promise((resolve) => server.close(resolve)) }
   })
 })

@@ -322,7 +322,8 @@ describe('AVL routed website', () => {
   })
 
   it('recovers an earlier chat with an accessible one-time-code flow', async () => {
-    class EventSourceStub { close() {} }
+    let source
+    class EventSourceStub { constructor() { source = this } close() {} emit(data) { this.onmessage({ data }) } }
     vi.stubGlobal('EventSource', EventSourceStub)
     const conversation = { id: 'chat-1', name: 'Amina', email: 'amina@example.com', status: 'open' }
     const message = { id: 'message-1', senderType: 'admin', body: 'Welcome back', createdAt: '2026-01-01T00:01:00.000Z' }
@@ -338,6 +339,10 @@ describe('AVL routed website', () => {
     const code = await screen.findByLabelText(/recovery code/i); expect(code).toHaveFocus(); expect(code).toHaveAttribute('autocomplete', 'one-time-code')
     await user.type(code, '123456'); await user.click(screen.getByRole('button', { name: /restore conversation/i }))
     expect(await screen.findByRole('heading', { name: /welcome back, Amina/i })).toBeInTheDocument(); expect(screen.getByText('Welcome back')).toBeInTheDocument()
+    act(() => source.emit(JSON.stringify({ type: 'message', message: { id: 'message-2', senderType: 'admin', body: 'Live reply', createdAt: '2026-01-01T00:02:00.000Z' } })))
+    expect(await screen.findByText('Live reply')).toBeInTheDocument()
+    act(() => source.emit('{malformed'))
+    expect(await screen.findByRole('status')).toHaveTextContent(/connection interrupted/i)
     expect(fetch).toHaveBeenCalledWith('/api/chat/recovery/verify', expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'amina@example.com', code: '123456' }) }))
   })
 

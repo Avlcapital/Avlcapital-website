@@ -40,6 +40,7 @@ export function createChatService({ conversations, messages, recoveryCodes, mail
       if (!record || !await verifySecret(code, record.codeHash)) { if (record) await recoveryCodes.failAttempt(record._id, recoveryMaxAttempts); return null }
       const claimed = await recoveryCodes.consume(record._id, timestamp, recoveryMaxAttempts)
       if (claimed?.modifiedCount !== 1) return null
+      await recoveryCodes.invalidateForEmail(email)
       const conversation = await conversations.findById(record.conversationId)
       if (!conversation || conversation.email !== email) return null
       const token = randomBytes(32).toString('base64url')
