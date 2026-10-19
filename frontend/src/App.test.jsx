@@ -297,4 +297,68 @@ describe('AVL routed website', () => {
     expect(screen.queryByText('Stale consultation')).not.toBeInTheDocument()
     expect(screen.getByText(/Page 1 of 1 · 1 messages/)).toBeInTheDocument()
   })
+
+  it('starts a live chat and sends a message', async () => {
+    class EventSourceStub { close() {} }
+    vi.stubGlobal('EventSource', EventSourceStub)
+    const conversation = { id: 'chat-1', name: 'Amina', email: 'amina@example.com', phone: '', status: 'open', createdAt: '2026-01-01T00:00:00.000Z' }
+    const sent = { id: 'message-1', senderType: 'visitor', body: 'I need funding advice.', createdAt: '2026-01-01T00:01:00.000Z' }
+    fetch.mockImplementation(async (url, options = {}) => {
+      if (url === '/api/chat/session' && !options.method) return { ok: true, status: 204 }
+      if (url === '/api/chat/session' && options.method === 'POST') return { ok: true, status: 201, json: async () => ({ conversation }) }
+      if (url === '/api/chat/messages' && options.method === 'POST') return { ok: true, status: 201, json: async () => ({ message: sent }) }
+      if (url === '/api/chat/messages') return { ok: true, status: 200, json: async () => ({ conversation, messages: [] }) }
+      return { ok: false, status: 404, json: async () => ({}) }
+    })
+    const user = userEvent.setup(); renderRoute('/')
+    await user.click(screen.getByRole('button', { name: /chat with us/i }))
+    await user.click(await screen.findByRole('button', { name: /start a new conversation/i }))
+    await user.type(await screen.findByLabelText('Name'), 'Amina')
+    await user.type(screen.getByLabelText('Email'), 'amina@example.com')
+    await user.click(screen.getByRole('button', { name: /start conversation/i }))
+    await user.type(await screen.findByLabelText('Message'), 'I need funding advice.')
+    await user.click(screen.getByRole('button', { name: /send message/i }))
+    expect(await screen.findByText('I need funding advice.')).toBeInTheDocument()
+  })
+
+  it('recovers an earlier chat with an accessible one-time-code flow', async () => {
+    class EventSourceStub { close() {} }
+    vi.stubGlobal('EventSource', EventSourceStub)
+    const conversation = { id: 'chat-1', name: 'Amina', email: 'amina@example.com', status: 'open' }
+    const message = { id: 'message-1', senderType: 'admin', body: 'Welcome back', createdAt: '2026-01-01T00:01:00.000Z' }
+    fetch.mockImplementation(async (url) => {
+      if (url === '/api/chat/session') return { ok: true, status: 204 }
+      if (url.endsWith('/recovery/request')) return { ok: true, status: 202, json: async () => ({ message: 'generic' }) }
+      if (url.endsWith('/recovery/verify')) return { ok: true, status: 200, json: async () => ({ conversation }) }
+      if (url === '/api/chat/messages') return { ok: true, status: 200, json: async () => ({ conversation, messages: [message] }) }
+      return { ok: false, status: 404, json: async () => ({}) }
+    })
+    const user = userEvent.setup(); renderRoute('/'); await user.click(screen.getByRole('button', { name: /chat with us/i }))
+    await user.click(await screen.findByRole('button', { name: /continue an earlier conversation/i })); await user.type(screen.getByLabelText('Email'), 'AMINA@example.com'); await user.click(screen.getByRole('button', { name: /email me a code/i }))
+    const code = await screen.findByLabelText(/recovery code/i); expect(code).toHaveFocus(); expect(code).toHaveAttribute('autocomplete', 'one-time-code')
+    await user.type(code, '123456'); await user.click(screen.getByRole('button', { name: /restore conversation/i }))
+    expect(await screen.findByRole('heading', { name: /welcome back, Amina/i })).toBeInTheDocument(); expect(screen.getByText('Welcome back')).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith('/api/chat/recovery/verify', expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'amina@example.com', code: '123456' }) }))
+  })
+
+  it('lets an administrator reply to and close a live chat', async () => {
+    const conversation = { id: '507f1f77bcf86cd799439011', name: 'Amina', email: 'amina@example.com', phone: '', status: 'open', createdAt: '2026-01-01T00:00:00.000Z', lastMessageAt: '2026-01-01T00:01:00.000Z' }
+    fetch.mockImplementation(async (url, options = {}) => {
+      if (url.endsWith('/admin/session')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      if (url.startsWith('/api/consultations?')) return { ok: true, status: 200, json: async () => ({ items: [], page: 1, pages: 1, total: 0 }) }
+      if (url.startsWith('/api/chat/admin/conversations?')) return { ok: true, status: 200, json: async () => ({ items: [conversation], page: 1, pages: 1, total: 1 }) }
+      if (url.endsWith(conversation.id) && !options.method) return { ok: true, status: 200, json: async () => ({ conversation, messages: [] }) }
+      if (url.endsWith('/messages')) return { ok: true, status: 201, json: async () => ({ message: { id: 'm1', senderType: 'admin', body: 'Hello Amina', createdAt: '2026-01-01T00:02:00.000Z' } }) }
+      if (url.endsWith('/status')) return { ok: true, status: 200, json: async () => ({ conversation: { ...conversation, status: 'closed' } }) }
+      return { ok: false, status: 404, json: async () => ({}) }
+    })
+    const user = userEvent.setup(); renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: 'Live chats' }))
+    await user.click(await screen.findByRole('button', { name: /Amina/i }))
+    await user.type(await screen.findByLabelText('Reply'), 'Hello Amina')
+    await user.click(screen.getByRole('button', { name: 'Send reply' }))
+    expect(await screen.findByText('Hello Amina')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Close conversation' }))
+    expect(await screen.findByText(/conversation is closed/i)).toBeInTheDocument()
+  })
 })

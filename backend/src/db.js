@@ -11,12 +11,21 @@ export async function connectDatabase({ uri, databaseName }) {
   const admins = database.collection('admins')
   const sessions = database.collection('adminSessions')
   const resets = database.collection('passwordResets')
+  const chatConversations = database.collection('chatConversations')
+  const chatMessages = database.collection('chatMessages')
+  const chatRecoveryCodes = database.collection('chatRecoveryCodes')
   await Promise.all([
     consultations.createIndex({ createdAt: -1 }, { name: 'consultations_created_at' }),
     partnerEnquiries.createIndex({ createdAt: -1 }, { name: 'partner_enquiries_created_at' }),
     admins.createIndex({ email: 1 }, { unique: true, name: 'admins_email' }),
     sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'sessions_expiry' }),
     resets.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'resets_expiry' }),
+    chatConversations.createIndex({ visitorTokenHash: 1 }, { unique: true, name: 'chat_visitor_token' }),
+    chatConversations.createIndex({ lastMessageAt: -1 }, { name: 'chat_last_message' }),
+    chatConversations.createIndex({ email: 1, lastMessageAt: -1, createdAt: -1 }, { name: 'chat_email_latest' }),
+    chatMessages.createIndex({ conversationId: 1, createdAt: 1, _id: 1 }, { name: 'chat_messages_order' }),
+    chatRecoveryCodes.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'chat_recovery_expiry' }),
+    chatRecoveryCodes.createIndex({ email: 1, createdAt: -1 }, { name: 'chat_recovery_email' }),
   ])
   return {
     consultationRepository: {
@@ -42,6 +51,30 @@ export async function connectDatabase({ uri, databaseName }) {
     },
     sessionRepository: { create: (record) => sessions.insertOne(record), find: (tokenHash) => sessions.findOne({ tokenHash }), delete: (tokenHash) => sessions.deleteOne({ tokenHash }), deleteForAdmin: (adminId) => sessions.deleteMany({ adminId }) },
     resetRepository: { create: (record) => resets.insertOne(record), findActive: (email, now) => resets.findOne({ email, expiresAt: { $gt: now }, usedAt: null }, { sort: { createdAt: -1 } }), markUsed: (id, now) => resets.updateOne({ _id: id, usedAt: null }, { $set: { usedAt: now } }), invalidate: (id) => resets.deleteOne({ _id: id }) },
+    chatConversationRepository: {
+      async create(record) { const result = await chatConversations.insertOne(record); return result.insertedId.toString() },
+      findByVisitorHash: (visitorTokenHash) => chatConversations.findOne({ visitorTokenHash }),
+      findLatestByEmail: (email) => chatConversations.findOne({ email }, { sort: { lastMessageAt: -1, createdAt: -1, _id: -1 } }),
+      findById: (id) => ObjectId.isValid(id) ? chatConversations.findOne({ _id: new ObjectId(id) }) : null,
+      list: ({ page, pageSize }) => chatConversations.find({}).sort({ lastMessageAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).toArray(),
+      count: () => chatConversations.countDocuments(),
+      touch: (id, timestamp) => ObjectId.isValid(id) ? chatConversations.updateOne({ _id: new ObjectId(id) }, { $set: { lastMessageAt: timestamp, updatedAt: timestamp } }) : null,
+      setStatus: (id, status, timestamp) => ObjectId.isValid(id) ? chatConversations.findOneAndUpdate({ _id: new ObjectId(id) }, { $set: { status, updatedAt: timestamp } }, { returnDocument: 'after' }) : null,
+      rotateVisitorToken: (id, currentHash, nextHash, timestamp) => ObjectId.isValid(id) ? chatConversations.findOneAndUpdate({ _id: new ObjectId(id), visitorTokenHash: currentHash }, { $set: { visitorTokenHash: nextHash, updatedAt: timestamp } }, { returnDocument: 'after' }) : null,
+    },
+    chatMessageRepository: {
+      async create(record) { const result = await chatMessages.insertOne(record); return result.insertedId.toString() },
+      findById: (id) => ObjectId.isValid(id) ? chatMessages.findOne({ _id: new ObjectId(id) }) : null,
+      list: (conversationId, after) => chatMessages.find({ conversationId, ...(after && ObjectId.isValid(after) ? { _id: { $gt: new ObjectId(after) } } : {}) }).sort({ createdAt: 1, _id: 1 }).limit(500).toArray(),
+    },
+    chatRecoveryRepository: {
+      create: (record) => chatRecoveryCodes.insertOne(record),
+      findActive: (email, timestamp, maxAttempts) => chatRecoveryCodes.findOne({ email, expiresAt: { $gt: timestamp }, usedAt: null, attempts: { $lt: maxAttempts } }, { sort: { createdAt: -1 } }),
+      consume: (id, timestamp, maxAttempts) => chatRecoveryCodes.updateOne({ _id: id, expiresAt: { $gt: timestamp }, usedAt: null, attempts: { $lt: maxAttempts } }, { $set: { usedAt: timestamp } }),
+      failAttempt: (id, maxAttempts) => chatRecoveryCodes.updateOne({ _id: id, usedAt: null, attempts: { $lt: maxAttempts } }, { $inc: { attempts: 1 } }),
+      invalidate: (id) => chatRecoveryCodes.deleteOne({ _id: id }),
+      invalidateForEmail: (email) => chatRecoveryCodes.deleteMany({ email, usedAt: null }),
+    },
     close: () => client.close(),
   }
 }

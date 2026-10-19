@@ -43,3 +43,33 @@ export function validatePartnerEnquiry(input) {
   if (!data.consent) errors.consent = 'Consent is required before we can contact you.'
   return { data, errors, valid: Object.keys(errors).length === 0 }
 }
+
+export function validateChatProfile(input) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const data = { name: normalize(source.name), email: normalize(source.email).toLowerCase(), phone: normalize(source.phone) }
+  const errors = {}
+  if (!data.name) errors.name = 'Enter your name.'
+  else if (data.name.length > 100) errors.name = 'Name must be 100 characters or fewer.'
+  if (!data.email) errors.email = 'Enter your email address.'
+  else if (data.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = 'Enter a valid email address.'
+  if (data.phone && (data.phone.length > 30 || !/^\+?[0-9 ()-]{7,30}$/.test(data.phone))) errors.phone = 'Enter a valid phone number.'
+  return { data, errors, valid: Object.keys(errors).length === 0 }
+}
+
+export function validateChatMessage(input) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const data = { body: typeof source.body === 'string' ? source.body.trim() : '' }
+  const errors = {}
+  if (!data.body) errors.body = 'Enter a message.'
+  else if (data.body.length > 2000) errors.body = 'Message must be 2,000 characters or fewer.'
+  return { data, errors, valid: Object.keys(errors).length === 0 }
+}
+
+export function validateChatRecovery(input, requireCode = false) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const data = { email: normalize(source.email).toLowerCase(), code: normalize(source.code) }
+  const errors = {}
+  if (!data.email || data.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = 'Enter a valid email address.'
+  if (requireCode && !/^\d{6}$/.test(data.code)) errors.code = 'Enter the six-digit code.'
+  return { data, errors, valid: Object.keys(errors).length === 0 }
+}
