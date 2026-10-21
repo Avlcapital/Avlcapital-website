@@ -8,7 +8,7 @@ import { consultationRouter } from './routers/consultations.js'
 import { partnerRouter } from './routers/partners.js'
 import { chatRouter } from './routers/chat.js'
 
-export function createApp({ service, partnerService, chatService, authService, corsOrigin, rateLimitWindowMs, rateLimitMax, authRateLimitMax, secureCookies = true }) {
+export function createApp({ service, partnerService, chatService, authService, dashboardService, corsOrigin, rateLimitWindowMs, rateLimitMax, authRateLimitMax, secureCookies = true }) {
   const app = express()
   app.disable('x-powered-by')
   app.use(helmet())
@@ -19,7 +19,7 @@ export function createApp({ service, partnerService, chatService, authService, c
   app.use('/api/consultations', consultationRouter({ service, requireAdmin: protectedRoute, rateLimitWindowMs, rateLimitMax }))
   if (partnerService) app.use('/api/partners', partnerRouter({ service: partnerService, requireAdmin: protectedRoute, rateLimitWindowMs, rateLimitMax }))
   if (chatService) app.use('/api/chat', chatRouter({ service: chatService, requireAdmin: protectedRoute, secureCookies, rateLimitWindowMs, rateLimitMax }))
-  if (authService) app.use('/api/admin', adminRouter({ auth: authService, requireAdmin: protectedRoute, secureCookies, rateLimitWindowMs, authRateLimitMax }))
+  if (authService) app.use('/api/admin', adminRouter({ auth: authService, dashboard: dashboardService || { overview: async () => ({ counts: {}, activity: [], unavailable: [] }) }, requireAdmin: protectedRoute, secureCookies, rateLimitWindowMs, authRateLimitMax }))
   app.use(errorHandler)
   return app
 }

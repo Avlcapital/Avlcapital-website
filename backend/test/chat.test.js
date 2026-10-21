@@ -59,6 +59,7 @@ describe('live chat API', () => {
     await request(app).get('/api/chat/admin/conversations').expect(401)
     const admin = request.agent(app); admin.jar.setCookie('avl_admin=admin-token')
     const list = await admin.get('/api/chat/admin/conversations').expect(200); assert.equal(list.body.items[0].email, 'amina@example.com')
+    await admin.get('/api/chat/admin/conversations?status=invalid').expect(400)
     await admin.post(`/api/chat/admin/conversations/${conversationId}/messages`).send({ body: 'How can we assist?' }).expect(201)
     await admin.patch(`/api/chat/admin/conversations/${conversationId}/status`).send({ status: 'closed' }).expect(200)
     await visitor.post('/api/chat/messages').send({ body: 'One more thing' }).expect(409)

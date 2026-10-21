@@ -19,6 +19,7 @@ export function createAuthService({ admins, sessions, resets, mailer, now = () =
   }
   return {
     createAdmin,
+    async listAdmins({ page = 1, pageSize = 50 } = {}) { const [items, total] = await Promise.all([admins.list({ page, pageSize }), admins.count()]); return { items: items.map((item) => ({ id: item._id?.toString(), email: item.email, createdAt: item.createdAt })), page, pageSize, total, pages: Math.ceil(total / pageSize) } },
     async bootstrap(email, password) { if (!email || !password || await admins.count() !== 0) return false; return (await createAdmin(email, password)).ok },
     async login(emailInput, password) { const email = normalizeEmail(emailInput); const admin = validEmail(email) ? await admins.findByEmail(email) : null; if (!admin || !await verifySecret(password || '', admin.passwordHash)) return null; const token = randomBytes(32).toString('base64url'); const expiresAt = new Date(now().getTime() + sessionHours * 3_600_000); await sessions.create({ tokenHash: digest(token), adminId: admin._id, sessionVersion: admin.sessionVersion, createdAt: now(), expiresAt }); return { token, expiresAt, admin: { id: admin._id.toString(), email: admin.email } } },
     async authenticate(token) { if (!token) return null; const session = await sessions.find(digest(token)); if (!session || session.expiresAt <= now()) return null; const admin = await admins.findById(session.adminId); return admin && admin.sessionVersion === session.sessionVersion ? { id: admin._id.toString(), email: admin.email } : null },
