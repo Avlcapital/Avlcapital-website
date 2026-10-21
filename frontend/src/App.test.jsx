@@ -41,7 +41,7 @@ describe('AVL routed website', () => {
   it('keeps the admin route outside public navigation and shows protected access', async () => {
     fetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) })
     renderRoute('/admin')
-    expect(await screen.findByRole('heading', { name: /enquiry inbox/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/password/i)).toHaveAttribute('minlength', '12')
     expect(screen.queryByRole('navigation', { name: /primary navigation/i })).not.toBeInTheDocument()
   })
@@ -55,6 +55,7 @@ describe('AVL routed website', () => {
     })
     const user = userEvent.setup()
     renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: 'Consultations' }))
     await user.click(await screen.findByRole('button', { name: /Amina/i }))
     expect(await screen.findByText('Hello')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /mark unread/i })).toBeInTheDocument()
@@ -64,8 +65,9 @@ describe('AVL routed website', () => {
 
   it('shows the authenticated empty inbox state', async () => {
     fetch.mockImplementation(async (url) => ({ ok: true, status: 200, json: async () => url.endsWith('/admin/session') ? { admin: { email: 'owner@example.com' } } : { items: [], page: 1, pages: 0, total: 0 } }))
-    renderRoute('/admin')
-    expect(await screen.findByText(/no consultation messages yet/i)).toBeInTheDocument()
+    const user = userEvent.setup(); renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: 'Consultations' }))
+    expect(await screen.findByText(/no matching records/i)).toBeInTheDocument()
   })
 
   it('logs in successfully and loads the inbox', async () => {
@@ -78,7 +80,7 @@ describe('AVL routed website', () => {
     await user.type(await screen.findByLabelText('Email'), 'owner@example.com')
     await user.type(screen.getByLabelText('Password'), 'very-long-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(await screen.findByText(/signed in as owner@example.com/i)).toBeInTheDocument()
+    expect(await screen.findByText('owner@example.com')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith('/api/admin/login', expect.objectContaining({ method: 'POST', credentials: 'include' }))
   })
 
@@ -108,6 +110,39 @@ describe('AVL routed website', () => {
     const user = userEvent.setup(); renderRoute('/admin')
     await user.click(await screen.findByRole('button', { name: /sign out/i }))
     expect(await screen.findByRole('status')).toHaveTextContent(/could not sign out.*try again later/i)
+  })
+
+  it('opens a recent dashboard activity in its queue', async () => {
+    const record = { id: '507f1f77bcf86cd799439011', name: 'Amina', email: 'a@example.com', phone: '+254700000000', solution: 'Trade finance', message: 'Dashboard lead', createdAt: '2026-01-02T00:00:00.000Z', readAt: '2026-01-03T00:00:00.000Z' }
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith('/admin/session')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      if (url.endsWith('/admin/dashboard')) return { ok: true, status: 200, json: async () => ({ counts: { unreadConsultations: 1, unreadPartners: 0, openChats: 0, administrators: 1 }, unavailable: [], activity: [{ id: record.id, type: 'consultation', title: 'Amina', subtitle: 'Trade finance', status: 'read', occurredAt: record.createdAt }] }) }
+      if (url.endsWith(`/consultations/${record.id}`)) return { ok: true, status: 200, json: async () => record }
+      if (url.startsWith('/api/consultations?')) return { ok: true, status: 200, json: async () => ({ items: [record], page: 1, pages: 1, total: 1 }) }
+      return { ok: false, status: 404, json: async () => ({}) }
+    })
+    const user = userEvent.setup(); renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: /Amina/i }))
+    expect(await screen.findByText('Dashboard lead')).toBeInTheDocument()
+  })
+
+  it('moves focus into and back from the mobile record detail', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} })))
+    const record = { id: '507f1f77bcf86cd799439011', name: 'Amina', email: 'a@example.com', phone: '+254700000000', solution: 'Trade finance', message: 'Hello', createdAt: '2026-01-02T00:00:00.000Z', readAt: '2026-01-03T00:00:00.000Z' }
+    fetch.mockImplementation(async (url) => {
+      if (url.endsWith('/admin/session')) return { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) }
+      if (url.startsWith('/api/consultations?')) return { ok: true, status: 200, json: async () => ({ items: [record], page: 1, pages: 1, total: 1 }) }
+      if (url.endsWith(record.id)) return { ok: true, status: 200, json: async () => record }
+      return { ok: true, status: 200, json: async () => ({ counts: {}, activity: [], unavailable: [] }) }
+    })
+    const user = userEvent.setup(); renderRoute('/admin'); await user.click(await screen.findByRole('button', { name: 'Consultations' })); const item = await screen.findByRole('button', { name: /Amina/i }); await user.click(item)
+    const back = await screen.findByRole('button', { name: /back to consultations/i }); await waitFor(() => expect(back).toHaveFocus()); await user.click(back); await waitFor(() => expect(item).toHaveFocus())
+  })
+
+  it('removes protected content when a queue request reports an expired session', async () => {
+    fetch.mockImplementation(async (url) => url.endsWith('/admin/session') ? { ok: true, status: 200, json: async () => ({ admin: { email: 'owner@example.com' } }) } : url.startsWith('/api/consultations?') ? { ok: false, status: 401, json: async () => ({ message: 'Authentication required.' }) } : { ok: true, status: 200, json: async () => ({ counts: {}, activity: [], unavailable: [] }) })
+    const user = userEvent.setup(); renderRoute('/admin'); await user.click(await screen.findByRole('button', { name: 'Consultations' }))
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument(); expect(screen.queryByText('owner@example.com')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -288,6 +323,7 @@ describe('AVL routed website', () => {
       return { ok: false, status: 404, json: async () => ({}) }
     })
     const user = userEvent.setup(); renderRoute('/admin')
+    await user.click(await screen.findByRole('button', { name: 'Consultations' }))
     await waitFor(() => expect(resolveConsultations).toBeTypeOf('function'))
     await user.click(screen.getByRole('button', { name: 'Partner enquiries' }))
     expect(await screen.findByRole('button', { name: /Highway Fuels/i })).toBeInTheDocument()
@@ -295,7 +331,7 @@ describe('AVL routed website', () => {
     await act(async () => Promise.resolve())
     expect(screen.getByRole('button', { name: /Highway Fuels/i })).toBeInTheDocument()
     expect(screen.queryByText('Stale consultation')).not.toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 1 · 1 messages/)).toBeInTheDocument()
+    expect(screen.getByText('1 / 1')).toBeInTheDocument()
   })
 
   it('starts a live chat and sends a message', async () => {

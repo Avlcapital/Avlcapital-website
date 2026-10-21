@@ -58,7 +58,7 @@ export function createChatService({ conversations, messages, recoveryCodes, mail
       const message = await messages.findById(id); emit(conversationId, { type: 'message', conversationId, message })
       return { message }
     },
-    async list({ page, pageSize }) { const [items, total] = await Promise.all([conversations.list({ page, pageSize }), conversations.count()]); return { items, total, page, pageSize, pages: Math.ceil(total / pageSize) } },
+    async list(query) { const [items, total] = await Promise.all([conversations.list(query), conversations.count(query)]); return { items, total, page: query.page, pageSize: query.pageSize, pages: Math.ceil(total / query.pageSize) } },
     async detail(id) { const conversation = await conversations.findById(id); if (!conversation) return null; return { conversation, messages: await messages.list(id) } },
     async sendAdmin(id, body, adminId) {
       const conversation = await conversations.findById(id); if (!conversation) return null
